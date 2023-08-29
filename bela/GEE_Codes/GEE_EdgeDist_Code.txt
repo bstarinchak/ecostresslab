@@ -1,0 +1,56 @@
+// GEE CODE: Distance from Edge for Amazon Basin
+
+    landcover = ee.Image("projects/mapbiomas-workspace/public/collection7/mapbiomas_collection70_integration_v2");
+ 
+ //Define parameters-----------------------------------------------------------------------------
+  var agri_pasturelist = ee.List([15, 9, 18,19, 20, 21,36, 39, 40,41, 46, 47,48]);
+  //15-pasture, 9-forest plantation,18-agriculture, 19-temporary crop, 20-sugar cane, 21-mosaic of use,36-perennial crop,
+  //39-soybean, 40-rice,41-other temporary crops, 46-coffee,47-citrus, 48-other perennial crops
+
+
+  //create edge, this is the forest nearest distance to agri/pasture land, mask by evergreen forest
+  function makeedge(igbpLandCover_grid,evergreenmask){
+      
+    var noevergreenmask = igbpLandCover_grid.remap(agri_pasturelist, ee.List.repeat(1, agri_pasturelist.length()));
+    noevergreenmask = noevergreenmask.selfMask()
+
+    var distance = noevergreenmask.fastDistanceTransform(3333).sqrt().multiply(ee.Image.pixelArea().sqrt()).updateMask(evergreenmask).int16();
+    var distance_pasture = evergreenmask.fastDistanceTransform(3333).sqrt().multiply(ee.Image.pixelArea().sqrt()).updateMask(noevergreenmask).int16();
+    
+    //the default distance metric returns squared distance. so need sqrt() to computes the square root of the input.
+    //fastDistanceTransform: with a maximum distance of 3333 meters.
+    //multiply(ee.Image.pixelArea().sqrt()): this is the length of pixel, to takes the pixel size into account.
+  
+    return distance.addBands(distance_pasture)
+    
+  }
+  
+  var selectyear=2020
+   //land cover
+  var igbpLandCover = landcover.select("classification_" + selectyear).clip(MG);
+  //Map.addLayer(igbpLandCover, LandcoverVisParam2, 'igbpLandCover');
+
+  var evergreenmask = igbpLandCover.eq(3);
+  evergreenmask = evergreenmask.selfMask();
+
+    //3.make edge-----------------------------------------------------------------------------
+      var tempedge = makeedge(igbpLandCover,evergreenmask)
+      var edgeoneyear = tempedge.select(0)//this is distance to forest edge, for every forest pixel
+      var edgeoneyear_pasture = tempedge.select(1)//this is distance to forest edge, for every pasture pixel
+      Map.addLayer(edgeoneyear, {min: 0, max: 10000,palette: ['darkred','red',  'darkorange',  'yellow','limegreen','darkgreen']}, 'Edge distance');
+
+//4. Export image to drive
+
+Export.image.toDrive({
+  image: edgeoneyear,
+  description: 'Edges',
+  scale: 30,
+  region: MG,
+  fileFormat: 'GeoTIFF',
+  maxPixels: 2000000000
+});
+
+//
+
+// Link to updated code: https://code.earthengine.google.com/552fe7cf9eb556f75607a74d01775d1c
+// Be sure to make a copy before you edit!
